@@ -1,0 +1,320 @@
+---
+title: "MA611 Assignment 4"
+author: "Ignacio Carracedo"
+date: "October 22nd, 2016"
+output: html_document
+---
+
+
+## Monthly log returns of CRSP equal-weighted index (Jan 1962 - Dec 1999)
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(FinTS)
+library(forecast)
+setwd('C:\\Users\\carrai1\\Desktop\\Master\\MA611_Time_Series\\Assigments\\4\\')
+crsp.df=read.table('m-ew6299.txt',header=FALSE)
+crsp.ts=ts(crsp.df$V2,start=c(1962,1),frequency=12)
+```
+
+First, we plot the log returns of CRSP equal-weighted index over time:
+
+```{r, echo=FALSE}
+plot(crsp.ts,main="Log returns of CRSP equal-weighted index")
+```
+
+The first impression is that we have a weak stationary time series (constant mean and constant variance)
+
+**1.a Obtain the summary statistics (sample mean, standard deviation, skewness, kurtosis, minimum, maximum). Are the log returns skewed? Do they have heavy tails? Use a 5% significance level to answer the questions ** 
+
+We get a better sense of the data by checking the summary statistics:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+summary(crsp.ts)
+FinTS.stats(crsp.ts)
+```
+
+The data is negatively skewed, the left tail is a little longer that the right tail, but the value is very close to 0 so we can say that the distribution is approximately symmetric.
+
+Kurtosis has a value of 3.35 which is close to a normal distribution (3). The tails are a little longer and fatter, and  its central peak is a little higher and sharper.
+
+Let's test now if we have enough evidence to say that the mean is different than 0. We get the z-score and calculate p-value under the assumption of normal distribution.We use hypothesis testing with null hypothesis that mean is 0:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+z=mean(crsp.ts)/sqrt(var(crsp.ts)/length(crsp.ts))
+pnorm(z,lower.tail=FALSE)
+```
+
+With the p-value from above and significance level at 0.05 we reject the null hypothesis and conclude that the mean is different from 0.
+
+**1.b. Discuss whether you believe that the series is weakly stationary or not?**
+
+As we previously mentioned, we consider the series as weakly stationary. Even though there are a few outliers we can say that the mean is constant (no visible trend) and also that the variance is constant throughout the series (homoscedasticity)
+
+
+**1.c. Build an AR(1) model for the log returns and check the model**
+
+Now that we assume the data as weakly stationary we can fit a AR(1) model:
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+crspar1=arima(crsp.ts,order=c(1,0,0))
+crspar1
+```
+
+We get the following model: **xt - 0.2243 xt-1 = 0.0122(1-0.2243) + at**. 
+The small value of the sigma^2 indicates a good fit, but to be sure let's check some diagnostic plots:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+plot(crspar1$residuals, main="Residuals AR(1)")
+tsdiag(crspar1)
+```
+
+The residual plot looks a like white noise. This point is also proven with the ACF (auto correlation) plot were we see no correlation between residuals. To be sure we do a Box-Ljung test for the first 12 lags which yields a p-value of 0.26:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+Box.test(crspar1$residuals,lag=12,type='Ljung')
+```
+
+Thus, we don't reject the null hypothesis and we conclude that the residuals are not correlated. 
+
+There is nothing else to model (just white noise) so the AR(1) is a good fit.
+
+
+**1.d. Build an MA (1) model for the log returns and check the model**
+
+Let's now check a MA(1) model:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+crspma1=arima(crsp.ts,order=c(0,0,1))
+crspma1
+```
+
+The model is **Xz = 0.0122 + at + 0.2336 at-1**.
+
+Let's review the diagnostic plots to see if we have a good model:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+plot(crspma1$residuals,main="Residuals")
+tsdiag(crspma1)
+```
+
+Once again, the residual plot looks a like white noise. There is no correlation on ACF plot. We do a Box-Ljung test (first 12 lags):
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+Box.test(crspma1$residuals,lag=12,type='Ljung')
+```
+
+The test yieds a p-value of 0.379, thus, we don't reject the null hypothesis and we conclude that the residuals are not correlated. 
+
+AM(1) is a good fit because the residuals are white noise.
+
+**1.e. Compute the 1-step to 3-step ahead forecasts for the AR(1) and MA(1) models built in parts c and d.**
+
+Both the AR(1) model and the MV(1) appear to be adequate so they can be used to generate predictions for the next 3 months. First, let's calculate and plot predictions with AR(1):
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+crspar1pred=predict(crspar1,3)
+crspar1pred
+# visualize
+upl1=crspar1pred$pred+2*crspar1pred$se
+lpl1=crspar1pred$pred-2*crspar1pred$se
+plot(crsp.ts,xlim=c(1960,2001),, main="Predictions AR(1)")
+predtime=seq(2000,2000.167,by=1/12)
+points(predtime,crspar1pred$pred,col='red',pch=19,cex=.8)
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+#let's zoom in
+plot(predtime,crspar1pred$pred,ylim=c(-.2,.2),col='red',type='l', main="Zoom - Predictions AR(1)")
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+
+```
+
+Now let's predict with MV(1):
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+#MV(1)
+crspma1pred=predict(crspma1,3)
+crspma1pred
+# visualize
+upl1=crspma1pred$pred+2*crspma1pred$se
+lpl1=crspma1pred$pred-2*crspma1pred$se
+plot(crsp.ts,xlim=c(1960,2001), main="Predictions MA(1)")
+predtime=seq(2000,2000.167,by=1/12)
+points(predtime,crspma1pred$pred,col='red',pch=19,cex=.8)
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+#let's zoom in
+plot(predtime,crspma1pred$pred,ylim=c(-.2,.2),col='red',type='l', main="Zoom - Predictions MA(1)")
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+```
+
+**1.f. Compare the fitted AR and MA models**
+
+To compare both models we look at the AIC metric which takes into account model complexity. AM(1) has a lower AIC (-1355.4) that AR(1) (-1354.23) so we can say that MA(1) is a better fit for the data. 
+
+## Monthly simple returns of the decile 1, decile 5 and decile 10 of the NYSE/AMEX/NASDAQ based on market capitalization
+
+Let's plot the data for decile 1, decile 5 and decile 10:
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+data(m.decile1510)
+mDecile1510 = zoo(m.decile1510, as.yearmon(index(m.decile1510)))
+plot(mDecile1510, main="Returns of the dec1, dec5, and dec10 of the NYSE/AMEX/NASDAQ based on market capitalization")
+```
+
+**2.a.For each return series, test the null hypothesis that the first 12 lags of the autocorrelations are zero at the 5% level. Draw your conclusion.**
+
+First, let's plot auto correlation for all 3 levels or dec (1, 5, and 10):
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+mDecile1acf=Acf(mDecile1510$Decile1,lag.max=12) # it seems we can go up to lag 12
+mDecile5acf=Acf(mDecile1510$Decile5,lag.max=12) # 1 lag
+mDecile10acf=Acf(mDecile1510$Decile10,lag.max=12) #no correlation, white noise
+```
+
+By inspecting the plots visually we can draw the following conclusions:
+
+* dec1: There is significant correlation at lag 1 (next month) and lag 12 (same month next year).
+* dec5: Significant correlation at lag 1. Other significant correlations are small and can be due to luck.
+* dec10: No significant correlation. Possible white noise.
+
+Now, let's test if there is significant correlation for the first 12 lags at 5% level using the Box-Ljung test:
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+Box.test(mDecile1510$Decile1,lag=12,type='Ljung') # not independence
+Box.test(mDecile1510$Decile5,lag=12,type='Ljung') # not independence
+Box.test(mDecile1510$Decile10,lag=12,type='Ljung') # independence
+```
+
+As we suspected, for dec1 and dec5 we reject the null hypothesis at 5% and we conclude there is correlation for the first 12 lags. For dec10 we don't reject the null hypothesis, there is no correlation.
+
+**2.b.Build an AR and an MA model for the series Decile 5.**
+
+We are going to focus on dec5 data. As we've seen above there is correlation at least at lag 1. Let's plot the data again:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+plot(mDecile1510$Decile5, main="Decile5")
+```
+
+Mean and variance seem constant so we conclude we have a weakly stationary time series.
+
+Let's also check summary statistics:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+summary(mDecile1510$Decile5)
+FinTS.stats(mDecile1510$Decile5)
+```
+
+Mean doesn't equal 0 but, do we have enough evidence to say is different that 0? Let t-test for null hypothesis mean=0:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+z=mean(mDecile1510$Decile5)/sqrt(var(mDecile1510$Decile5)/length(mDecile1510$Decile5))
+pnorm(z,lower.tail=FALSE)
+```
+
+The p-value is very small so we reject the null hypothesis and conclude the mean is not 0.
+
+In order to select *p* for our AR(p) model we can use several techniques. Here we will use `ar` function in R which will select the appropriate *p* based on AIC results for each model:
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+ar(mDecile1510$Decile5,method='mle')
+```
+
+The model selected is AR(1) which matches our believe after inspecting auto correlation plot:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+mDecile5acf=Acf(mDecile1510$Decile5,lag.max=12)
+dec5ar1=arima(mDecile1510$Decile5,order=c(1,0,0))
+dec5ar1
+```
+
+Thus the model is **xt - 0.1975 xt-1 = 0.0114(1-0.1975) + at**
+
+Let's check diagnostic plots to see if it's a good fit:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+plot(dec5ar1$residuals, main="Residuals AR(1)")
+tsdiag(dec5ar1)
+```
+
+Residual plot looks like white noise (no correlation). To prove it we run a Box-Ljung test for first 12 lags:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+Box.test(dec5ar1$residuals,lag=12,type='Ljung') # independent residuals!
+```
+
+P-value is above significance level (5%) so we conclude the residuals are independent for the first 12 lags. Our model is a good fit to the data and there is nothing else to model as the residuals are white noise.
+
+Now we are going to fit a MV(q) model. To select *q* we can inspect again auto correlation plot. It seems *q* equal to 1 can be a good fit for the data. We can confirm this by using R `auto.arima` which will compare models using AIC. We are only interested in the entries with non-zero mean and the form ARIMA(0,0,q).
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+#we can use this to compare AIC
+gnpfita=auto.arima(mDecile1510$Decile5,max.p=3,max.q=3,max.P=0,max.Q=0,stationary=TRUE,ic='aic',stepwise=FALSE,trace=TRUE)
+```
+
+ARIMA(0,0,1) has the lower AIC which matches what we saw on the auto correlation plot. Thus, we use MA(1):
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+dec5ma1=arima(mDecile1510$Decile5,order=c(0,0,1))
+dec5ma1
+```
+
+The model is **Xz = 0.0114 + at + 0.2050 at-1**.
+
+Let's check diagnostic plots to see if it's a good fit:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+plot(dec5ma1$residuals,, main="Residuals AR(1)") # white noise
+tsdiag(dec5ma1)
+```
+
+Residual plot looks like white noise (no correlation). To prove it we run a Box-Ljung test for first 12 lags:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+Box.test(dec5ma1$residuals,lag=12,type='Ljung') # independent residuals!
+```
+
+P-value is above significance level (5%) so we conclude the residuals are independent for the first 12 lags. Again, our model is a good fit to the data.
+
+**2.c.Use the AR and MA models built to produce 1-step to 3-step ahead forecasts of the series**
+
+Now that we know our models are a good fit let's calculate predictions for the next 3 steps. First we use AR(1) to predict and plot the results:
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+#predictions 1 and 3
+dec5ar1pred=predict(dec5ar1,3)
+dec5ar1pred
+# visualize AR
+upl1=dec5ar1pred$pred+2*dec5ar1pred$se
+lpl1=dec5ar1pred$pred-2*dec5ar1pred$se
+plot(crsp.ts,xlim=c(1960,2001))
+predtime=seq(2000,2000.167,by=1/12)
+points(predtime,dec5ar1pred$pred,col='red',pch=19,cex=.8)
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+#let's zoom in
+plot(predtime,dec5ar1pred$pred,ylim=c(-.2,.2),col='red',type='l')
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+```
+
+Now we do the same with MA(1):
+
+```{r, echo=FALSE, warning=FALSE,, eval=TRUE, message=FALSE}
+dec5ma1pred=predict(dec5ma1,3)
+dec5ma1pred
+# visualize MA
+upl1=dec5ma1pred$pred+2*dec5ma1pred$se
+lpl1=dec5ma1pred$pred-2*dec5ma1pred$se
+plot(crsp.ts,xlim=c(1960,2001))
+predtime=seq(2000,2000.167,by=1/12)
+points(predtime,dec5ma1pred$pred,col='red',pch=19,cex=.8)
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+#let's zoom in
+plot(predtime,dec5ma1pred$pred,ylim=c(-.2,.2),col='red',type='l')
+lines(predtime,upl1,col='blue',lwd=2)
+lines(predtime,lpl1,col='blue',lwd=2)
+```
+
+**2.d.Compare the AR and MA models you fit to determine which you feel is better and why.**
+
+MA(1) has lower AIC (-1480.58) than AR(1) (-1479.6) so we can say that is a better fit.
+
